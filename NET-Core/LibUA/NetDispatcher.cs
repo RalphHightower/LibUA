@@ -1329,8 +1329,8 @@ namespace LibUA
                     byte chunkType = memBuf.Buffer[offset + 3];
                     if (chunkType != 'C' && chunkType != 'F')
                     {
-                        // Invalid chunk type
-                        return null;
+                        // Invalid chunk type: protocol error, not "wait for more data"
+                        throw new InvalidOperationException(string.Format("Invalid chunk type 0x{0:X2} at offset {1}", chunkType, offset));
                     }
 
                     bool isFinal = chunkType == (byte)'F';
@@ -1339,11 +1339,23 @@ namespace LibUA
                         return null;
                     }
 
+                    // A chunk shorter than its own header would never advance the offset
+                    if (chunkLength < ChunkHeaderOverhead)
+                    {
+                        throw new InvalidOperationException(string.Format("Invalid chunk length {0} at offset {1}", chunkLength, offset));
+                    }
+
                     chunkLengths.Add(chunkLength);
                     offset += chunkLength;
 
                     if (isFinal)
                     {
+                        // The final chunk must be completely received, not only its header
+                        if (memBuf.Capacity < offset)
+                        {
+                            return null;
+                        }
+
                         break;
                     }
                 }
